@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
-
+import plotly.express as px
 
 if "gastos" not in st.session_state:
     st.session_state.gastos = pd.DataFrame(columns=["Data", "Categoria", "Descrição", "Valor", "Forma de Pagamento"])
@@ -83,8 +83,9 @@ st.metric(label="Total de Gastos", value=f"R$ {total_gastos:.2f}")
 #GRAFICO DE GASTO POR CATEGORIA
 st.subheader("Gastos por Categoria")
 if not gastos_filtrados.empty:
-    gastos_por_categoria = gastos_filtrados.groupby("Categoria")["Valor"].sum()
-    st.bar_chart(gastos_por_categoria)
+    gastos_por_categoria = gastos_filtrados.groupby("Categoria")["Valor"].sum().reset_index()
+    fig_categoria = px.pie(gastos_por_categoria, values="Valor", names="Categoria", hole=0.4)
+    st.plotly_chart(fig_categoria, use_container_width=True)
 
 #GRAFICO DE GASTO POR FORMA DE PAGAMENTO
 st.subheader("Gastos por Forma de Pagamento")
