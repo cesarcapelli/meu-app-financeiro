@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
+import datetime
+
 
 if "gastos" not in st.session_state:
     st.session_state.gastos = pd.DataFrame(columns=["Data", "Categoria", "Descrição", "Valor", "Forma de Pagamento"])
 
 if "gastos_fixos" not in st.session_state:
-    st.session_state.gastos_fixos = pd.DataFrame(columns=["Dia do Vencimento","Descrição","Forma de Pagamento"])
+    st.session_state.gastos_fixos = pd.DataFrame(columns=["Dia do Vencimento","Categoria","Descrição","Valor","Forma de Pagamento"])
 
 # BARRA LATERAL
 st.sidebar.header("Adicionar Novo Gasto")
@@ -54,28 +56,63 @@ if botao_fixo:
     st.session_state.gastos_fixos = pd.concat([st.session_state.gastos_fixos, novo_fixo], ignore_index=True)
     st.toast("Gasto fixo cadastrado com sucesso!", icon="📌")
 
+# FILTROS POR MES
+st.sidebar.divider()
+st.sidebar.header("Filtros")
+if not st.session_state.gastos.empty:
+    gastos_df = st.session_state.gastos.copy()
+    gastos_df["Data"] = pd.to_datetime(gastos_df["Data"]) #GARANTE QUE A COLUNA SEJA VISTA COMO DATA
+    gastos_df["Mês/Ano"] = gastos_df["Data"].dt.strftime("%m/%Y") #CRIA UMA COLUNA TEMPORÁRIA MM/AAAA
+
+    meses_disponiveis = ["Todos"] + list(gastos_df["Mês/Ano"].unique())
+    mes_filtro = st.sidebar.selectbox("Filtrar por Mês", meses_disponiveis)
+
+    if mes_filtro !="Todos":
+        gastos_filtrados = gastos_df[gastos_df["Mês/Ano"] == mes_filtro]
+    else:
+        gastos_filtrados = gastos_df
+else:
+    gastos_filtrados = st.session_state.gastos
+
 st.title("My Grana")
 
 #CALCULANDO E EXIBINDO O TOTAL DE GASTOS
-total_gastos = st.session_state.gastos["Valor"].sum()
+total_gastos = gastos_filtrados["Valor"].sum()
 st.metric(label="Total de Gastos", value=f"R$ {total_gastos:.2f}")
 
 #GRAFICO DE GASTO POR CATEGORIA
 st.subheader("Gastos por Categoria")
-if not st.session_state.gastos.empty:
-    gastos_por_categoria = st.session_state.gastos.groupby("Categoria")["Valor"].sum()
+if not gastos_filtrados.empty:
+    gastos_por_categoria = gastos_filtrados.groupby("Categoria")["Valor"].sum()
     st.bar_chart(gastos_por_categoria)
 
 #GRAFICO DE GASTO POR FORMA DE PAGAMENTO
 st.subheader("Gastos por Forma de Pagamento")
-if not st.session_state.gastos.empty:
-    gastos_por_pagamento = st.session_state.gastos.groupby("Forma de Pagamento")["Valor"].sum()
+if not gastos_filtrados.empty:
+    gastos_por_pagamento = gastos_filtrados.groupby("Forma de Pagamento")["Valor"].sum()
     st.bar_chart(gastos_por_pagamento)
 
 st.subheader("Tabela de Detalhes")
-st.dataframe(st.session_state.gastos)
+st.session_state.gastos = st.data_editor(st.session_state.gastos, num_rows="dynamic")
 
 #EXIBINDO OS GASTOS FIXOS
 st.subheader("Meus Gastos Fixos")
 if not st.session_state.gastos_fixos.empty:
-    st.dataframe(st.session_state.gastos_fixos)
+    st.session_state.gastos_fixos = st.data_editor(st.session_state.gastos_fixos, num_rows="dynamic")
+
+    if st.button("🪄 Lançar Gastos Fixos no Mês"):
+        hoje = datetime.date.today()
+        gastos_para_lancar = st.session_state.gastos_fixos.copy()
+
+        def montar_data(dia):
+            try:
+                return hoje.replace(day=int(dia))
+            except ValueError:
+                return hoje #SE O DIA DO VENCIMENTO FOR 31 E ESTIVERMOS EM FEV. ELE LANÇA PRO DIA DE HOJE PARA NÃO DAR ERRO.
+            
+        gastos_para_lancar["Data"] = gastos_para_lancar["Dia do Vencimento"].apply(montar_data)
+        gastos_para_lancar = gastos_para_lancar.drop(columns=["Dia do Vencimento"])
+
+        st.session_state.gastos = pd.concat([st.session_state.gastos, gastos_para_lancar], ignore_index=True)
+        st.toast("Gastos fixos lançados com sucesso!", icon="🪄")
+        st.rerun()
