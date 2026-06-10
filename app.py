@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 import datetime
 import plotly.express as px
+import io
+
+
+
 
 if "gastos" not in st.session_state:
     st.session_state.gastos = pd.DataFrame(columns=["Data", "Categoria", "Descrição", "Valor", "Forma de Pagamento"])
@@ -31,6 +35,43 @@ if botao_adicionar:
     }])
     st.session_state.gastos = pd.concat([st.session_state.gastos, novo_gasto], ignore_index=True)
     st.toast("Gasto adicionado com sucesso!", icon="✅")
+
+#IMPORTAR VIA EXCEL
+st.sidebar.divider()
+st.sidebar.header("Importar via Excel")
+
+#CRIAR MODELO DE EXCEL PARA DOWNLOAD
+buffer = io.BytesIO()
+modelo_df = pd.DataFrame(columns=["Data","Categoria","Descrição","Valor","Forma de Pagamento"])
+with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+    modelo_df.to_excel(writer, index=False)
+
+st.sidebar.download_button(
+    label="📥 Baixar Modelo Excel para preenchimento",
+    data=buffer.getvalue(),
+    file_name="modelo_gastos.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+arquivo_excel = st.sidebar.file_uploader("Selecione um arquivo Excel (.xls)", type=["xlsx"])
+
+if arquivo_excel is not None:
+    if st.sidebar.button("Processar Arquivo"):
+        try:
+            df_importado = pd.read_excel(arquivo_excel)
+            colunas_esperadas = ["Data","Categoria","Descrição","Valor","Forma de Pagamento"]
+            if all(col in df_importado.columns for col in colunas_esperadas):
+                #CONVERTE A COLUNA DE DATA PARA O FORMATO CORRETO E REMOVE HORAS SE HOUVER
+                df_importado["Data"] = pd.to_datetime(df_importado["Data"]).dt.date
+                #ADICIONA OS NOVOS DADOS AO QUE JÁ EXISTE NO APP
+                st.session_state.gastos = pd.concat([st.session_state.gastos, df_importado[colunas_esperadas]], ignore_index=True)
+                #ADICIONA OS NOVOS DADOS AO QUE JÁ EXISTE NO APP    
+                st.toast("Arquivo Excel processado com sucesso", icon= "📊")
+                st.rerun()
+            else:
+                st.sidebar.error(f"O Excel precisa conter as colunas:{','.join(colunas_esperadas)}")
+        except Exception as e:
+            st.sidebar.error(f"Erro ao ler o arquivo:{e}")                
 
 # SEÇÃO DE GASTOS FIXOS NA BARRA LATERAL
 st.sidebar.divider()
